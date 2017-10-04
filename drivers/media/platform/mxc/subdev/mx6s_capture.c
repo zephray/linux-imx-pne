@@ -273,6 +273,12 @@ static struct mx6s_fmt formats[] = {
 		.pixelformat	= V4L2_PIX_FMT_SBGGR8,
 		.mbus_code	= MEDIA_BUS_FMT_SBGGR8_1X8,
 		.bpp		= 1,
+	}, {
+		.name		= "GREYSCALE (Y8)",
+		.fourcc		= V4L2_PIX_FMT_GREY,
+		.pixelformat	= V4L2_PIX_FMT_GREY,
+		.mbus_code	= MEDIA_BUS_FMT_Y8_1X8,
+		.bpp		= 1,
 	}
 };
 
@@ -463,6 +469,7 @@ static void csi_init_interface(struct mx6s_csi_dev *csi_dev)
 	val |= BIT_FCC;
 	val |= 1 << SHIFT_MCLKDIV;
 	val |= BIT_MCLKEN;
+	val |= BIT_INV_PCLK;
 	__raw_writel(val, csi_dev->regbase + CSI_CSICR1);
 
 	imag_para = (640 << 16) | 960;
@@ -804,6 +811,7 @@ static int mx6s_configure_csi(struct mx6s_csi_dev *csi_dev)
 	switch (csi_dev->fmt->pixelformat) {
 	case V4L2_PIX_FMT_YUV32:
 	case V4L2_PIX_FMT_SBGGR8:
+	case V4L2_PIX_FMT_GREY:
 		width = pix->width;
 		break;
 	case V4L2_PIX_FMT_UYVY:
@@ -835,6 +843,7 @@ static int mx6s_configure_csi(struct mx6s_csi_dev *csi_dev)
 			cr18 |= BIT_MIPI_DATA_FORMAT_YUV422_8B;
 			break;
 		case V4L2_PIX_FMT_SBGGR8:
+		case V4L2_PIX_FMT_GREY:
 			cr18 |= BIT_MIPI_DATA_FORMAT_RAW8;
 			break;
 		default:

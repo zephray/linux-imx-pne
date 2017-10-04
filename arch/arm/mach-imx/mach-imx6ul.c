@@ -39,13 +39,6 @@ static void __init imx6ul_enet_clk_init(void)
 
 static int ksz8081_phy_fixup(struct phy_device *dev)
 {
-	if (dev && dev->interface == PHY_INTERFACE_MODE_MII) {
-		phy_write(dev, 0x1f, 0x8110);
-		phy_write(dev, 0x16, 0x201);
-	} else if (dev && dev->interface == PHY_INTERFACE_MODE_RMII) {
-		phy_write(dev, 0x1f, 0x8190);
-		phy_write(dev, 0x16, 0x202);
-	}
 
 	return 0;
 }
@@ -64,8 +57,7 @@ static int ksz8081_phy_fixup(struct phy_device *dev)
 #define PHY_ID_KSZ8081_MNRN61	0x00221561
 static void __init imx6ul_enet_phy_init(void)
 {
-	phy_register_fixup(PHY_ANY_ID, PHY_ID_KSZ8081_MNRN60, 0xffffffff, ksz8081_phy_fixup);
-	phy_register_fixup(PHY_ANY_ID, PHY_ID_KSZ8081_MNRN61, 0xffffffff, ksz8081_phy_fixup);
+
 }
 
 #define OCOTP_CFG3			0x440
@@ -107,10 +99,10 @@ static void __init imx6ul_opp_check_speed_grading(struct device *cpu_dev)
 	val >>= OCOTP_CFG3_SPEED_SHIFT;
 	val &= 0x3;
 	if (cpu_is_imx6ul()) {
-		if (val < OCOTP_CFG3_SPEED_696MHZ) {
+		/*if (val < OCOTP_CFG3_SPEED_696MHZ) {
 			if (dev_pm_opp_disable(cpu_dev, 696000000))
 				pr_warn("Failed to disable 696MHz OPP\n");
-		}
+		}*/
 	}
 
 	if (cpu_is_imx6ull()) {
