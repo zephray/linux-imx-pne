@@ -311,6 +311,8 @@ struct mx6s_csi_dev {
 	struct vb2_alloc_ctx		*alloc_ctx;
 	struct v4l2_ctrl_handler	ctrl_handler;
 
+	bool no_current_buffer;
+
 	struct mutex		lock;
 	spinlock_t			slock;
 
@@ -611,6 +613,40 @@ static void csi_set_imagpara(struct mx6s_csi_dev *csi,
 /*
  *  Videobuf operations
  */
+static void mx6s_update_csi_buf(struct mx6s_csi_dev *csi_dev,
+				 unsigned long phys, int bufnum)
+{
+	//if (bufnum == 1)
+		csi_write(csi_dev, phys, CSI_CSIDMASA_FB2);
+	//else
+		csi_write(csi_dev, phys, CSI_CSIDMASA_FB1);
+}
+
+static void mx6s_csi_update_next_buf(struct mx6s_csi_dev *csi_dev)
+{
+	struct mx6s_buffer *buf;
+	struct vb2_buffer *vb;
+	unsigned long phys;
+
+	if (csi_dev->no_current_buffer) {
+		buf = list_first_entry(&csi_dev->capture, struct mx6s_buffer,
+			       internal.queue);
+
+		buf->internal.bufnum = 0;
+
+		list_move_tail(csi_dev->capture.next, &csi_dev->active_bufs);
+
+		vb = &buf->vb;
+		vb->state = VB2_BUF_STATE_ACTIVE;
+
+		phys = vb2_dma_contig_plane_dma_addr(vb, 0);
+		mx6s_update_csi_buf(csi_dev, phys, 0);
+
+		csi_dev->no_current_buffer = false;
+	}
+	
+}
+
 static int mx6s_videobuf_setup(struct vb2_queue *vq,
 			const struct v4l2_format *fmt,
 			unsigned int *count, unsigned int *num_planes,
@@ -684,17 +720,11 @@ static void mx6s_videobuf_queue(struct vb2_buffer *vb)
 
 	list_add_tail(&buf->internal.queue, &csi_dev->capture);
 
+	mx6s_csi_update_next_buf(csi_dev);
+
 	spin_unlock_irqrestore(&csi_dev->slock, flags);
 }
 
-static void mx6s_update_csi_buf(struct mx6s_csi_dev *csi_dev,
-				 unsigned long phys, int bufnum)
-{
-	if (bufnum == 1)
-		csi_write(csi_dev, phys, CSI_CSIDMASA_FB2);
-	else
-		csi_write(csi_dev, phys, CSI_CSIDMASA_FB1);
-}
 
 static void mx6s_csi_init(struct mx6s_csi_dev *csi_dev)
 {
@@ -733,12 +763,12 @@ static int mx6s_csi_enable(struct mx6s_csi_dev *csi_dev)
 	}
 
 	local_irq_save(flags);
-	for (timeout = 10000000; timeout > 0; timeout--) {
+	/*for (timeout = 10000000; timeout > 0; timeout--) {
 		if (csi_read(csi_dev, CSI_CSISR) & BIT_SOF_INT) {
 			val = csi_read(csi_dev, CSI_CSICR3);
 			csi_write(csi_dev, val | BIT_DMA_REFLASH_RFF,
 					CSI_CSICR3);
-			/* Wait DMA reflash done */
+			// Wait DMA reflash done 
 			for (timeout2 = 1000000; timeout2 > 0; timeout2--) {
 				if (csi_read(csi_dev, CSI_CSICR3) &
 					BIT_DMA_REFLASH_RFF)
@@ -751,10 +781,10 @@ static int mx6s_csi_enable(struct mx6s_csi_dev *csi_dev)
 				local_irq_restore(flags);
 				return -ETIME;
 			}
-			/* For imx6sl csi, DMA FIFO will auto start when sensor ready to work,
-			 * so DMA should enable right after FIFO reset, otherwise dma will lost data
-			 * and image will split.
-			 */
+			// For imx6sl csi, DMA FIFO will auto start when sensor ready to work,
+			// so DMA should enable right after FIFO reset, otherwise dma will lost data
+			// and image will split.
+			 
 			csi_dmareq_rff_enable(csi_dev);
 			csi_enable_int(csi_dev, 1);
 			csi_enable(csi_dev, 1);
@@ -766,7 +796,10 @@ static int mx6s_csi_enable(struct mx6s_csi_dev *csi_dev)
 		pr_err("timeout when wait for SOF\n");
 		local_irq_restore(flags);
 		return -ETIME;
-	}
+	}*/
+	csi_dmareq_rff_enable(csi_dev);
+	csi_enable_int(csi_dev, 1);
+	csi_enable(csi_dev, 1);
 	local_irq_restore(flags);
 
 	return 0;
@@ -864,9 +897,9 @@ static int mx6s_start_streaming(struct vb2_queue *vq, unsigned int count)
 	unsigned long phys;
 	unsigned long flags;
 
-	if (count < 2)
+	//if (count < 2)
+	if (count < 1)
 		return -ENOBUFS;
-
 	/*
 	 * I didn't manage to properly enable/disable
 	 * a per frame basis during running transfers,
@@ -874,6 +907,7 @@ static int mx6s_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 * discard frames when no buffer is available.
 	 * Feel free to work on this ;)
 	 */
+
 	csi_dev->discard_size = csi_dev->pix.sizeimage;
 	csi_dev->discard_buffer = dma_alloc_coherent(csi_dev->v4l2_dev.dev,
 					PAGE_ALIGN(csi_dev->discard_size),
@@ -905,7 +939,7 @@ static int mx6s_start_streaming(struct vb2_queue *vq, unsigned int count)
 	list_move_tail(csi_dev->capture.next, &csi_dev->active_bufs);
 
 	/* csi buf 1 */
-	buf = list_first_entry(&csi_dev->capture, struct mx6s_buffer,
+	/*buf = list_first_entry(&csi_dev->capture, struct mx6s_buffer,
 			       internal.queue);
 	buf->internal.bufnum = 1;
 	vb = &buf->vb;
@@ -913,7 +947,7 @@ static int mx6s_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	phys = vb2_dma_contig_plane_dma_addr(vb, 0);
 	mx6s_update_csi_buf(csi_dev, phys, buf->internal.bufnum);
-	list_move_tail(csi_dev->capture.next, &csi_dev->active_bufs);
+	list_move_tail(csi_dev->capture.next, &csi_dev->active_bufs);*/
 
 	spin_unlock_irqrestore(&csi_dev->slock, flags);
 
@@ -1016,10 +1050,11 @@ static void mx6s_csi_frame_done(struct mx6s_csi_dev *csi_dev,
 	}
 
 	csi_dev->frame_count++;
+	csi_dev->no_current_buffer = true;
 
 	/* Config discard buffer to active_bufs */
 	if (list_empty(&csi_dev->capture)) {
-		if (list_empty(&csi_dev->discard)) {
+		/*if (list_empty(&csi_dev->discard)) {
 			dev_warn(csi_dev->dev,
 					"%s: trying to access empty discard list\n",
 					__func__);
@@ -1033,22 +1068,11 @@ static void mx6s_csi_frame_done(struct mx6s_csi_dev *csi_dev,
 		list_move_tail(csi_dev->discard.next, &csi_dev->active_bufs);
 
 		mx6s_update_csi_buf(csi_dev,
-					csi_dev->discard_buffer_dma, bufnum);
+					csi_dev->discard_buffer_dma, bufnum);*/
 		return;
 	}
 
-	buf = list_first_entry(&csi_dev->capture, struct mx6s_buffer,
-			       internal.queue);
-
-	buf->internal.bufnum = bufnum;
-
-	list_move_tail(csi_dev->capture.next, &csi_dev->active_bufs);
-
-	vb = &buf->vb;
-	vb->state = VB2_BUF_STATE_ACTIVE;
-
-	phys = vb2_dma_contig_plane_dma_addr(vb, 0);
-	mx6s_update_csi_buf(csi_dev, phys, bufnum);
+	mx6s_csi_update_next_buf(csi_dev);
 }
 
 static irqreturn_t mx6s_csi_irq_handler(int irq, void *data)
@@ -1345,11 +1369,17 @@ static int mx6s_vidioc_querybuf(struct file *file, void *priv,
 static int mx6s_vidioc_qbuf(struct file *file, void *priv,
 			   struct v4l2_buffer *p)
 {
+	int result;
+
 	struct mx6s_csi_dev *csi_dev = video_drvdata(file);
 
 	WARN_ON(priv != file->private_data);
 
-	return vb2_qbuf(&csi_dev->vb2_vidq, p);
+	result = vb2_qbuf(&csi_dev->vb2_vidq, p);
+
+	
+
+	return result;
 }
 
 static int mx6s_vidioc_dqbuf(struct file *file, void *priv,
@@ -1503,7 +1533,7 @@ static int mx6s_vidioc_streamon(struct file *file, void *priv,
 		return -EINVAL;
 
 	ret = vb2_streamon(&csi_dev->vb2_vidq, i);
-	if (!ret)
+	if (!ret)	
 		v4l2_subdev_call(sd, video, s_stream, 1);
 
 	return ret;

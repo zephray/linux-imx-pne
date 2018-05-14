@@ -75,7 +75,7 @@ struct mt9m_mode_info {
 };
 
 struct mt9m {
-	struct v4l2_subdev		subdev;
+	struct v4l2_subdev subdev;
 	struct i2c_client *i2c_client;
 	struct v4l2_pix_format pix;
 	const struct mt9m_datafmt	*fmt;
@@ -99,11 +99,12 @@ static struct reg_value mt9m_init_setting_VGA[] = {
 	{0x01, 0x000C, 0, 0}, {0x02, 0x0014, 0, 0}, {0x03, 0x03BF, 0, 0}, 
 	{0x04, 0x04FF, 0, 0}, {0x05, 0x0009, 0, 0}, {0x06, 0x0019, 0, 0}, 
 	{0x07, 0x0002, 0, 0}, {0x09, 0x0200, 0, 0}, {0x0C, 0x0000, 0, 0}, 
-	{0x1E, 0x8000, 0, 0}, {0x20, 0x111C, 0, 0}, {0x2B, 0x0008, 0, 0},
+	{0x1E, 0x8100, 0, 0}, {0x20, 0x111C, 0, 0}, {0x2B, 0x0008, 0, 0},
 	{0x2C, 0x0008, 0, 0}, {0x2D, 0x0008, 0, 0}, {0x2E, 0x0008, 0, 0},
 	{0x35, 0x0010, 0, 0}, {0x5F, 0x0904, 0, 0}, {0x60, 0x0000, 0, 0},
 	{0x61, 0x0000, 0, 0}, {0x62, 0x0498, 0, 0}, {0x63, 0x0000, 0, 0}, 
 	{0x64, 0x0000, 0, 0},  
+	// 0x1E: 0x8000 for continuous mode, 0x8100 for snapshot mode
 };
 
 static struct reg_value mt9m_setting_VGA[] = {
@@ -195,11 +196,11 @@ static s32 mt9m_write_reg(u8 reg, u16 val)
 	au8Buf[1] = val >> 8;
 	au8Buf[2] = val & 0xff;	
 
-	if (i2c_master_send(mt9m_data.i2c_client, au8Buf, 3) < 0) {
+	/*if (i2c_master_send(mt9m_data.i2c_client, au8Buf, 3) < 0) {
 		pr_err("%s:write reg error:reg=%x,val=%x\n",
 			__func__, reg, val);
 		return -1;
-	}
+	}*/
 
 	return 0;
 }
@@ -211,17 +212,17 @@ static s32 mt9m_read_reg(u8 reg, u16 *val)
 
 	au8Reg = reg;
 
-	if (1 != i2c_master_send(mt9m_data.i2c_client, &au8Reg, 1)) {
+	/*if (1 != i2c_master_send(mt9m_data.i2c_client, &au8Reg, 1)) {
 		pr_err("%s:write reg error:reg=%x\n",
 				__func__, reg);
 		return -1;
 	}
 
-	if (2 != i2c_master_recv(mt9m_data.i2c_client, &u16RdVal, 2)) {
+	if (2 != i2c_master_recv(mt9m_data.i2c_client, (char *)&u16RdVal, 2)) {
 		pr_err("%s:read reg error:reg=%x,val=%x\n",
 				__func__, reg, u16RdVal);
 		return -1;
-	}
+	}*/
 
 	*val = u16RdVal;
 
@@ -245,7 +246,6 @@ static int mt9m_download_firmware(struct reg_value *pModeSetting, s32 ArySize)
 	register u8 RegAddr = 0;
 	register u8 Mask = 0;
 	register u16 Val = 0;
-	u16 RegVal = 0;
 	int i, retval = 0;
 
 	for (i = 0; i < ArySize; ++i, ++pModeSetting) {
@@ -356,7 +356,6 @@ static int mt9m_s_power(struct v4l2_subdev *sd, int on)
 
 	return 0;
 }
-
 
 /*!
  * mt9m_g_parm - V4L2 sensor interface handler for VIDIOC_G_PARM ioctl
@@ -534,13 +533,9 @@ static int mt9m_enum_framesizes(struct v4l2_subdev *sd,
 	if (fse->index > mt9m_mode_MAX)
 		return -EINVAL;
 
-	fse->max_width =
-			max(mt9m_mode_info_data[0][fse->index].width,
-			    mt9m_mode_info_data[1][fse->index].width);
+	fse->max_width = mt9m_mode_info_data[0][fse->index].width;
 	fse->min_width = fse->max_width;
-	fse->max_height =
-			max(mt9m_mode_info_data[0][fse->index].height,
-			    mt9m_mode_info_data[1][fse->index].height);
+	fse->max_height = mt9m_mode_info_data[0][fse->index].height,
 	fse->min_height = fse->max_height;
 	return 0;
 }
@@ -641,6 +636,7 @@ static struct v4l2_subdev_video_ops mt9m_subdev_video_ops = {
 
 	.s_mbus_fmt	= mt9m_s_fmt,
 	.g_mbus_fmt	= mt9m_g_fmt,
+
 	.try_mbus_fmt	= mt9m_try_fmt,
 	.enum_mbus_fmt	= mt9m_enum_fmt,
 };
@@ -730,7 +726,7 @@ static int mt9m_probe(struct i2c_client *client,
 	mt9m_reset();
 
 	chip_id = 0;
-	retval = mt9m_read_reg(0x00, &chip_id);
+	/*retval = mt9m_read_reg(0x00, &chip_id);
 	pr_info("camera id %04x\n", chip_id);
 	if (chip_id != 0x3184) {
 		pr_warning("camera mt9m001 is not found\n");
@@ -743,7 +739,7 @@ static int mt9m_probe(struct i2c_client *client,
 		pr_warning("camera mt9m init failed\n");
 		mt9m_power_down(1);
 		return retval;
-	}
+	}*/
 
 	clk_disable(mt9m_data.sensor_clk);
 
