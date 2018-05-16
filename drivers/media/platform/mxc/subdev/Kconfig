@@ -41,4 +41,5 @@ config MXC_CAMERA_OV5647_MIPI
 	depends on MXC_MIPI_CSI && I2C
 	---help---
 	  If you plan to use the ov5647 Camera with mipi interface in your MXC system, say Y here.
+
 endif
