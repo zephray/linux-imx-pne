@@ -236,7 +236,7 @@
 &gpmi {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_nand>;
-	status = "disabled";
+	status = "okay";
 	partition@0{
 			label = "boot";
 			reg = <0x0000 0x400000>; /*4M*/
