@@ -38,8 +38,8 @@
 
 	backlight {
 		compatible = "pwm-backlight";
-		pwms = <&pwm1 0 5000000>;
-		brightness-levels = <0 4 8 16 32 64 128 255>;
+		pwms = <&pwm1 0 100000>;
+		brightness-levels = <254 191 140 127 100 67 33 0>;
 		default-brightness-level = <6>;
 		status = "okay";
 	};
@@ -163,6 +163,16 @@
 			//pinctrl-0 = <&touchscreen_ft5x06_pins>; // MX6QDL_PAD_GPIO_5__GPIO1_IO05
 		};*/
 	};
+
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_leds>;
+		bl {
+			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+	};
 };
 
 &cpu0 {
@@ -264,7 +274,6 @@
 
 };
 
-
 &iomuxc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
@@ -282,6 +291,12 @@
 				MX6UL_PAD_GPIO1_IO02__GPIO1_IO02 0x1f8b0 /* SDA */
 				MX6UL_PAD_GPIO1_IO03__GPIO1_IO03 0x1b0b0 /* INT */
 				MX6UL_PAD_GPIO1_IO04__GPIO1_IO04 0x1f8b0 /* SCL */
+			>;
+		};
+
+		pinctrl_leds: ledsgrp {
+			fsl,pins = <
+				MX6UL_PAD_GPIO1_IO06__GPIO1_IO06 0x17059 /* BL */
 			>;
 		};
 
