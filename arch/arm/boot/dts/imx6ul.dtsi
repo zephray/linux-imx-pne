@@ -973,10 +973,10 @@
 				reg = <0x02198000 0x4000>;
 				interrupts = <GIC_SPI 100 IRQ_TYPE_LEVEL_HIGH>;
 				clocks = <&clks IMX6UL_CLK_ADC1>;
-				num-channels = <2>;
+				num-channels = <10>;
 				clock-names = "adc";
 				status = "disabled";
-                        };
+            };
 
 			i2c1: i2c@021a0000 {
 				#address-cells = <1>;
