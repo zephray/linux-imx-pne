@@ -460,7 +460,7 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
 	input_set_abs_params(input, ABS_X, 0, 640 - 1, 0, 0);
 	input_set_abs_params(input, ABS_Y, 0, 480 - 1, 0, 0);
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0, 640 - 1, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, 480 * 64 - 1, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, 480 - 1, 0, 0);
 
 	if (!pdata)
 		touchscreen_parse_of_params(input);
