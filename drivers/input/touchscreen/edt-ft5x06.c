@@ -42,64 +42,24 @@
 
 #define MAX_SUPPORT_POINTS		5
 
-#define WORK_REGISTER_THRESHOLD		0xA4
-#define WORK_REGISTER_REPORT_RATE	0x88
-#define WORK_REGISTER_GAIN		0x89
-#define WORK_REGISTER_OFFSET		0x8C
-#define WORK_REGISTER_NUM_X		0x9D
-#define WORK_REGISTER_NUM_Y		0x9F
-
-#define NO_REGISTER			0xff
-
-#define WORK_REGISTER_OPMODE		0x3c
-#define FACTORY_REGISTER_OPMODE		0x01
-
 #define TOUCH_EVENT_DOWN		0x00
 #define TOUCH_EVENT_UP			0x01
 #define TOUCH_EVENT_ON			0x02
 #define TOUCH_EVENT_RESERVED		0x03
 
-#define EDT_NAME_LEN			23
-#define EDT_SWITCH_MODE_RETRIES		10
-#define EDT_SWITCH_MODE_DELAY		5 /* msec */
-#define EDT_RAW_DATA_RETRIES		100
-#define EDT_RAW_DATA_DELAY		1 /* msec */
-
-struct edt_reg_addr {
-	int reg_threshold;
-	int reg_report_rate;
-	int reg_gain;
-	int reg_offset;
-	int reg_num_x;
-	int reg_num_y;
-};
-
 struct edt_ft5x06_ts_data {
 	struct i2c_client *client;
 	struct input_dev *input;
-	u16 num_x;
-	u16 num_y;
+	char name[20];
 
 	int reset_pin;
 	int irq_pin;
 	int wake_pin;
 
-#if defined(CONFIG_DEBUG_FS)
-	struct dentry *debug_dir;
-	u8 *raw_buffer;
-	size_t raw_bufsize;
-#endif
+	u8 addr;
+	u8 data;
 
 	struct mutex mutex;
-	bool factory_mode;
-	int threshold;
-	int gain;
-	int offset;
-	int report_rate;
-
-	char name[EDT_NAME_LEN];
-
-	struct edt_reg_addr reg_addr;
 };
 
 static int edt_ft5x06_ts_readwrite(struct i2c_client *client,
@@ -223,22 +183,20 @@ static int edt_ft5x06_register_read(struct edt_ft5x06_ts_data *tsdata,
 struct edt_ft5x06_attribute {
 	struct device_attribute dattr;
 	size_t field_offset;
-	u8 limit_low;
-	u8 limit_high;
-	u8 addr;
+	u8 type;
 };
 
-#define EDT_ATTR(_field, _mode, _addr,			\
-		_limit_low, _limit_high)				\
+#define EDT_ATTR(_field, _mode, _type)				\
 	struct edt_ft5x06_attribute edt_ft5x06_attr_##_field = {	\
 		.dattr = __ATTR(_field, _mode,				\
 				edt_ft5x06_setting_show,		\
 				edt_ft5x06_setting_store),		\
 		.field_offset = offsetof(struct edt_ft5x06_ts_data, _field), \
-		.addr = _addr,					\
-		.limit_low = _limit_low,				\
-		.limit_high = _limit_high,				\
+		.type = _type,					\
 	}
+
+#define EDT_AT_ADDR 0
+#define EDT_AT_DATA 1
 
 static ssize_t edt_ft5x06_setting_show(struct device *dev,
 				       struct device_attribute *dattr,
@@ -252,19 +210,14 @@ static ssize_t edt_ft5x06_setting_show(struct device *dev,
 	int val;
 	size_t count = 0;
 	int error = 0;
-	u8 addr;
+	u8 type;
 
 	mutex_lock(&tsdata->mutex);
 
-	if (tsdata->factory_mode) {
-		error = -EIO;
-		goto out;
-	}
+	type = attr->type;
 
-	addr = attr->addr;
-
-	if (addr != NO_REGISTER) {
-		val = edt_ft5x06_register_read(tsdata, addr);
+	if (type == EDT_AT_DATA) {
+		val = edt_ft5x06_register_read(tsdata, tsdata->addr);
 		if (val < 0) {
 			error = val;
 			dev_err(&tsdata->client->dev,
@@ -272,15 +225,10 @@ static ssize_t edt_ft5x06_setting_show(struct device *dev,
 				dattr->attr.name, error);
 			goto out;
 		}
-	} else {
-		val = *field;
-	}
-
-	if (val != *field) {
-		dev_warn(&tsdata->client->dev,
-			 "%s: read (%d) and stored value (%d) differ\n",
-			 dattr->attr.name, val, *field);
 		*field = val;
+	}
+	else {
+		val = *field;
 	}
 
 	count = scnprintf(buf, PAGE_SIZE, "%d\n", val);
@@ -300,28 +248,18 @@ static ssize_t edt_ft5x06_setting_store(struct device *dev,
 	u8 *field = (u8 *)tsdata + attr->field_offset;
 	unsigned int val;
 	int error;
-	u8 addr;
+	u8 type;
 
 	mutex_lock(&tsdata->mutex);
-
-	if (tsdata->factory_mode) {
-		error = -EIO;
-		goto out;
-	}
 
 	error = kstrtouint(buf, 0, &val);
 	if (error)
 		goto out;
 
-	if (val < attr->limit_low || val > attr->limit_high) {
-		error = -ERANGE;
-		goto out;
-	}
+	type = attr->type;
 
-	addr = attr->addr;
-
-	if (addr != NO_REGISTER) {
-		error = edt_ft5x06_register_write(tsdata, addr, val);
+	if (type == EDT_AT_DATA) {
+		error = edt_ft5x06_register_write(tsdata, tsdata->addr, val);
 		if (error) {
 			dev_err(&tsdata->client->dev,
 				"Failed to update attribute %s, error: %d\n",
@@ -336,16 +274,12 @@ out:
 	return error ?: count;
 }
 
-static EDT_ATTR(gain, S_IWUSR | S_IRUGO, WORK_REGISTER_GAIN, 0, 255);
-static EDT_ATTR(offset, S_IWUSR | S_IRUGO, WORK_REGISTER_OFFSET, 0, 255);
-static EDT_ATTR(threshold, S_IWUSR | S_IRUGO, WORK_REGISTER_THRESHOLD, 0, 255);
-static EDT_ATTR(report_rate, S_IWUSR | S_IRUGO, WORK_REGISTER_REPORT_RATE, 0, 255);
+static EDT_ATTR(addr, S_IWUSR | S_IRUGO, 0);
+static EDT_ATTR(data, S_IWUSR | S_IRUGO, 1);
 
 static struct attribute *edt_ft5x06_attrs[] = {
-	&edt_ft5x06_attr_gain.dattr.attr,
-	&edt_ft5x06_attr_offset.dattr.attr,
-	&edt_ft5x06_attr_threshold.dattr.attr,
-	&edt_ft5x06_attr_report_rate.dattr.attr,
+	&edt_ft5x06_attr_addr.dattr.attr,
+	&edt_ft5x06_attr_data.dattr.attr,
 	NULL
 };
 
@@ -353,194 +287,6 @@ static const struct attribute_group edt_ft5x06_attr_group = {
 	.attrs = edt_ft5x06_attrs,
 };
 
-#ifdef CONFIG_DEBUG_FS
-static int edt_ft5x06_work_mode(struct edt_ft5x06_ts_data *tsdata)
-{
-	struct i2c_client *client = tsdata->client;
-	int retries = EDT_SWITCH_MODE_RETRIES;
-	struct edt_reg_addr *reg_addr = &tsdata->reg_addr;
-	int ret;
-	int error;
-
-	/* mode register is 0x01 when in the factory mode */
-	error = edt_ft5x06_register_write(tsdata, FACTORY_REGISTER_OPMODE, 0x1);
-	if (error) {
-		dev_err(&client->dev,
-			"failed to switch to work mode, error: %d\n", error);
-		return error;
-	}
-
-	tsdata->factory_mode = false;
-
-	do {
-		mdelay(EDT_SWITCH_MODE_DELAY);
-		/* mode register is 0x01 when in factory mode */
-		ret = edt_ft5x06_register_read(tsdata, WORK_REGISTER_OPMODE);
-		if (ret == 0x01)
-			break;
-	} while (--retries > 0);
-
-	if (retries == 0) {
-		dev_err(&client->dev, "not in work mode after %dms.\n",
-			EDT_SWITCH_MODE_RETRIES * EDT_SWITCH_MODE_DELAY);
-		tsdata->factory_mode = true;
-		return -EIO;
-	}
-
-	kfree(tsdata->raw_buffer);
-	tsdata->raw_buffer = NULL;
-
-	/* restore parameters */
-	edt_ft5x06_register_write(tsdata, reg_addr->reg_threshold,
-				  tsdata->threshold);
-	edt_ft5x06_register_write(tsdata, reg_addr->reg_gain,
-				  tsdata->gain);
-	edt_ft5x06_register_write(tsdata, reg_addr->reg_offset,
-				  tsdata->offset);
-	edt_ft5x06_register_write(tsdata, reg_addr->reg_report_rate,
-				  tsdata->report_rate);
-
-	enable_irq(client->irq);
-
-	return 0;
-}
-
-static int edt_ft5x06_debugfs_mode_get(void *data, u64 *mode)
-{
-	struct edt_ft5x06_ts_data *tsdata = data;
-
-	*mode = tsdata->factory_mode;
-
-	return 0;
-};
-
-static int edt_ft5x06_debugfs_mode_set(void *data, u64 mode)
-{
-	struct edt_ft5x06_ts_data *tsdata = data;
-	int retval = 0;
-
-	if (mode > 1)
-		return -ERANGE;
-
-	mutex_lock(&tsdata->mutex);
-
-	mutex_unlock(&tsdata->mutex);
-
-	return retval;
-};
-
-DEFINE_SIMPLE_ATTRIBUTE(debugfs_mode_fops, edt_ft5x06_debugfs_mode_get,
-			edt_ft5x06_debugfs_mode_set, "%llu\n");
-
-static ssize_t edt_ft5x06_debugfs_raw_data_read(struct file *file,
-				char __user *buf, size_t count, loff_t *off)
-{
-	struct edt_ft5x06_ts_data *tsdata = file->private_data;
-	struct i2c_client *client = tsdata->client;
-	int retries  = EDT_RAW_DATA_RETRIES;
-	int val, i, error;
-	size_t read = 0;
-	int colbytes;
-	char wrbuf[3];
-	u8 *rdbuf;
-
-	if (*off < 0 || *off >= tsdata->raw_bufsize)
-		return 0;
-
-	mutex_lock(&tsdata->mutex);
-
-	if (!tsdata->factory_mode || !tsdata->raw_buffer) {
-		error = -EIO;
-		goto out;
-	}
-
-	error = edt_ft5x06_register_write(tsdata, 0x08, 0x01);
-	if (error) {
-		dev_dbg(&client->dev,
-			"failed to write 0x08 register, error %d\n", error);
-		goto out;
-	}
-
-	do {
-		msleep(EDT_RAW_DATA_DELAY);
-		val = edt_ft5x06_register_read(tsdata, 0x08);
-		if (val < 1)
-			break;
-	} while (--retries > 0);
-
-	if (val < 0) {
-		error = val;
-		dev_dbg(&client->dev,
-			"failed to read 0x08 register, error %d\n", error);
-		goto out;
-	}
-
-	if (retries == 0) {
-		dev_dbg(&client->dev,
-			"timed out waiting for register to settle\n");
-		error = -ETIMEDOUT;
-		goto out;
-	}
-
-	rdbuf = tsdata->raw_buffer;
-	colbytes = tsdata->num_y * sizeof(u16);
-
-	wrbuf[0] = 0xf5;
-	wrbuf[1] = 0x0e;
-	for (i = 0; i < tsdata->num_x; i++) {
-		wrbuf[2] = i;  /* column index */
-		error = edt_ft5x06_ts_readwrite(tsdata->client,
-						sizeof(wrbuf), wrbuf,
-						colbytes, rdbuf);
-		if (error)
-			goto out;
-
-		rdbuf += colbytes;
-	}
-
-	read = min_t(size_t, count, tsdata->raw_bufsize - *off);
-	if (copy_to_user(buf, tsdata->raw_buffer + *off, read)) {
-		error = -EFAULT;
-		goto out;
-	}
-
-	*off += read;
-out:
-	mutex_unlock(&tsdata->mutex);
-	return error ?: read;
-};
-
-static const struct file_operations debugfs_raw_data_fops = {
-	.open = simple_open,
-	.read = edt_ft5x06_debugfs_raw_data_read,
-};
-
-static void
-edt_ft5x06_ts_prepare_debugfs(struct edt_ft5x06_ts_data *tsdata,
-			      const char *debugfs_name)
-{
-	tsdata->debug_dir = debugfs_create_dir(debugfs_name, NULL);
-	if (!tsdata->debug_dir)
-		return;
-
-	debugfs_create_u16("num_x", S_IRUSR, tsdata->debug_dir, &tsdata->num_x);
-	debugfs_create_u16("num_y", S_IRUSR, tsdata->debug_dir, &tsdata->num_y);
-
-	debugfs_create_file("mode", S_IRUSR | S_IWUSR,
-			    tsdata->debug_dir, tsdata, &debugfs_mode_fops);
-	debugfs_create_file("raw_data", S_IRUSR,
-			    tsdata->debug_dir, tsdata, &debugfs_raw_data_fops);
-}
-
-static void
-edt_ft5x06_ts_teardown_debugfs(struct edt_ft5x06_ts_data *tsdata)
-{
-	debugfs_remove_recursive(tsdata->debug_dir);
-	kfree(tsdata->raw_buffer);
-}
-
-#else
-
 static inline void
 edt_ft5x06_ts_prepare_debugfs(struct edt_ft5x06_ts_data *tsdata,
 			      const char *debugfs_name)
@@ -551,8 +297,6 @@ static inline void
 edt_ft5x06_ts_teardown_debugfs(struct edt_ft5x06_ts_data *tsdata)
 {
 }
-
-#endif /* CONFIG_DEBUGFS */
 
 static int edt_ft5x06_ts_reset(struct i2c_client *client,
 			struct edt_ft5x06_ts_data *tsdata)
@@ -596,99 +340,29 @@ static int edt_ft5x06_ts_reset(struct i2c_client *client,
 static int edt_ft5x06_ts_identify(struct i2c_client *client,
 					struct edt_ft5x06_ts_data *tsdata)
 {
-	u8 rdbuf[EDT_NAME_LEN];
+	u8 rdbuf[1];
 	//char *p;
 	int error;
 	char *model_name = tsdata->name;
-
-	/* see what we find if we assume it is a M06 *
-	 * if we get less than EDT_NAME_LEN, we don't want
-	 * to have garbage in there
-	 */
-	memset(rdbuf, 0, sizeof(rdbuf));
-	error = edt_ft5x06_ts_readwrite(client, 1, "\xbb",
-					EDT_NAME_LEN - 1, rdbuf);
-	if (error)
-		return error;
-
-	error = edt_ft5x06_ts_readwrite(client, 1, "\xA6", 2, rdbuf);
-	if (error)
-		return error;
 
 	error = edt_ft5x06_ts_readwrite(client, 1, "\xA8", 1, rdbuf);
 	if (error)
 		return error;
 
-	snprintf(model_name, EDT_NAME_LEN, "EP0%i%i0M09",
-		rdbuf[0] >> 4, rdbuf[0] & 0x0F);
+	snprintf(model_name, 20, "generic ft5x06 (%02x)", rdbuf[0]);
 
 	return 0;
 }
 
 #define EDT_ATTR_CHECKSET(name, reg) \
 do {								\
-	if (pdata->name >= edt_ft5x06_attr_##name.limit_low &&		\
-	    pdata->name <= edt_ft5x06_attr_##name.limit_high)		\
-		edt_ft5x06_register_write(tsdata, reg, pdata->name);	\
+	edt_ft5x06_register_write(tsdata, reg, pdata->name);	\
 } while (0)
 
 #define EDT_GET_PROP(name, reg) {				\
 	u32 val;						\
 	if (of_property_read_u32(np, #name, &val) == 0)		\
 		edt_ft5x06_register_write(tsdata, reg, val);	\
-}
-
-static void edt_ft5x06_ts_get_dt_defaults(struct device_node *np,
-					struct edt_ft5x06_ts_data *tsdata)
-{
-	struct edt_reg_addr *reg_addr = &tsdata->reg_addr;
-
-	EDT_GET_PROP(threshold, reg_addr->reg_threshold);
-	EDT_GET_PROP(gain, reg_addr->reg_gain);
-	EDT_GET_PROP(offset, reg_addr->reg_offset);
-}
-
-static void
-edt_ft5x06_ts_get_defaults(struct edt_ft5x06_ts_data *tsdata,
-			   const struct edt_ft5x06_platform_data *pdata)
-{
-	struct edt_reg_addr *reg_addr = &tsdata->reg_addr;
-
-	if (!pdata->use_parameters)
-		return;
-
-	/* pick up defaults from the platform data */
-	EDT_ATTR_CHECKSET(threshold, reg_addr->reg_threshold);
-	EDT_ATTR_CHECKSET(gain, reg_addr->reg_gain);
-	EDT_ATTR_CHECKSET(offset, reg_addr->reg_offset);
-	EDT_ATTR_CHECKSET(report_rate, reg_addr->reg_report_rate);
-}
-
-static void
-edt_ft5x06_ts_get_parameters(struct edt_ft5x06_ts_data *tsdata)
-{
-	struct edt_reg_addr *reg_addr = &tsdata->reg_addr;
-
-	tsdata->threshold = edt_ft5x06_register_read(tsdata,
-						     reg_addr->reg_threshold);
-	tsdata->gain = edt_ft5x06_register_read(tsdata, reg_addr->reg_gain);
-	tsdata->offset = edt_ft5x06_register_read(tsdata, reg_addr->reg_offset);
-	tsdata->report_rate = edt_ft5x06_register_read(tsdata, reg_addr->reg_report_rate);
-	tsdata->num_x = edt_ft5x06_register_read(tsdata, reg_addr->reg_num_x);
-	tsdata->num_y = edt_ft5x06_register_read(tsdata, reg_addr->reg_num_y);
-}
-
-static void
-edt_ft5x06_ts_set_regs(struct edt_ft5x06_ts_data *tsdata)
-{
-	struct edt_reg_addr *reg_addr = &tsdata->reg_addr;
-
-	reg_addr->reg_threshold = WORK_REGISTER_THRESHOLD;
-	reg_addr->reg_report_rate = WORK_REGISTER_REPORT_RATE;
-	reg_addr->reg_gain = WORK_REGISTER_GAIN;
-	reg_addr->reg_offset = WORK_REGISTER_OFFSET;
-	reg_addr->reg_num_x = WORK_REGISTER_NUM_X;
-	reg_addr->reg_num_y = WORK_REGISTER_NUM_Y;
 }
 
 #ifdef CONFIG_OF
@@ -769,26 +443,12 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
 	mutex_init(&tsdata->mutex);
 	tsdata->client = client;
 	tsdata->input = input;
-	tsdata->factory_mode = false;
 
 	error = edt_ft5x06_ts_identify(client, tsdata);
 	if (error) {
 		dev_err(&client->dev, "touchscreen probe failed\n");
 		return error;
 	}
-
-	edt_ft5x06_ts_set_regs(tsdata);
-
-	if (!pdata)
-		edt_ft5x06_ts_get_dt_defaults(client->dev.of_node, tsdata);
-	else
-		edt_ft5x06_ts_get_defaults(tsdata, pdata);
-
-	edt_ft5x06_ts_get_parameters(tsdata);
-
-	dev_dbg(&client->dev,
-		"Model \"%s\", %dx%d sensors\n",
-		tsdata->name, tsdata->num_x, tsdata->num_y);
 
 	input->name = tsdata->name;
 	input->id.bustype = BUS_I2C;
@@ -797,12 +457,10 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
 	__set_bit(EV_KEY, input->evbit);
 	__set_bit(EV_ABS, input->evbit);
 	__set_bit(BTN_TOUCH, input->keybit);
-	input_set_abs_params(input, ABS_X, 0, tsdata->num_x * 64 - 1, 0, 0);
-	input_set_abs_params(input, ABS_Y, 0, tsdata->num_y * 64 - 1, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_X,
-			     0, tsdata->num_x * 64 - 1, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_Y,
-			     0, tsdata->num_y * 64 - 1, 0, 0);
+	input_set_abs_params(input, ABS_X, 0, 640 - 1, 0, 0);
+	input_set_abs_params(input, ABS_Y, 0, 480 - 1, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_X, 0, 640 - 1, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, 480 * 64 - 1, 0, 0);
 
 	if (!pdata)
 		touchscreen_parse_of_params(input);
