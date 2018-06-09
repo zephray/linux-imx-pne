@@ -59,8 +59,6 @@
 			regulator-name = "VSD_3V3";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
-			gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;
-			enable-active-high;
 		};
 
 		reg_gpio_dvfs: regulator-gpio {
@@ -393,7 +391,7 @@
 };
 
 &usbotg1 {
-	dr_mode = "host";
+	dr_mode = "device";
 	disable-over-current;
 	status = "okay";
 };
@@ -401,7 +399,7 @@
 &usbotg2 {
 	dr_mode = "host";
 	disable-over-current;
-	status = "disabled";
+	status = "okay";
 };
 
 &usbphy1 {
@@ -420,6 +418,7 @@
 	cd-gpios = <&gpio1 19 GPIO_ACTIVE_LOW>;
 	keep-power-in-suspend;
 	enable-sdio-wakeup;
+	no-1-8-v;
 	vmmc-supply = <&reg_sd1_vmmc>;
 	status = "okay";
 };
