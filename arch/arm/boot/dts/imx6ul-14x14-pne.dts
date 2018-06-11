@@ -9,6 +9,7 @@
 /dts-v1/;
 
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/pwm/pwm.h>
 #include "imx6ul.dtsi"
 
 / {
@@ -38,9 +39,9 @@
 
 	backlight {
 		compatible = "pwm-backlight";
-		pwms = <&pwm1 0 100000>;
-		brightness-levels = <254 191 140 127 100 67 33 0>;
-		default-brightness-level = <6>;
+		pwms = <&pwm1 0 100000 PWM_POLARITY_INVERTED>;
+		brightness-levels = <146 149 155 167 191 212 236 255>;
+		default-brightness-level = <5>;
 		status = "okay";
 	};
 
@@ -171,11 +172,6 @@
 		compatible = "gpio-leds";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_leds>;
-		bl {
-			label = "backlight";
-			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
-			default-state = "on";
-		};
 
 		heartbeat {
 			label = "heartbeat";
@@ -187,21 +183,21 @@
 	pwmleds {
 		compatible = "pwm-leds";
 		green {
-			label = "green";
-			pwms = <&pwm2 0 100000>;
+			label = "uv";
+			pwms = <&pwm2 0 100000 PWM_POLARITY_INVERTED>;
 			max-brightness = <255>;
 		};
 
 		uv {
-			label = "uv";
-			pwms = <&pwm4 0 100000>;
+			label = "green";
+			pwms = <&pwm4 0 100000 PWM_POLARITY_INVERTED>;
 			max-brightness = <255>;
 		};
 	};
 
 	beeper {
 		compatible = "pwm-beeper";
-		pwms = <&pwm6 0 50000>;
+		pwms = <&pwm6 0 50000 0>;
 	};
 };
 
