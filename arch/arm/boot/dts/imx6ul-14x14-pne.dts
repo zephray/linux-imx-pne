@@ -42,6 +42,7 @@
 		pwms = <&pwm1 0 100000 PWM_POLARITY_INVERTED>;
 		brightness-levels = <146 149 155 167 191 212 236 255>;
 		default-brightness-level = <5>;
+		enable-gpios = <&gpio5 2 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 
@@ -132,11 +133,6 @@
 				};
 			};
 		};
-
-		eeprom: eeprom@50 {
-        	compatible = "at,24c02";
-        	reg = <0x50>;
-    	};
 	};
 
 	i2c@1 {
@@ -158,6 +154,11 @@
 			//pinctrl-0 = <&touchscreen_ft5x06_pins>; // MX6QDL_PAD_GPIO_5__GPIO1_IO05
 		};
 
+		pcf8563: pcf8563@51 {
+			compatible = "nxp,pcf8563";
+			reg = <0x51>;
+		};
+
 		/*ft5x06_ts@38 {
 			compatible = "ft5x06-ts";
 			reg = <0x38>;
@@ -177,6 +178,11 @@
 			label = "heartbeat";
 			gpios = <&gpio5 5 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "heartbeat";
+		};
+
+		panel {
+			label = "panel";
+			gpios = <&gpio5 8 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -230,28 +236,17 @@
 	fsl,ldo-bypass = <0>; /* DCDC, ldo-enable */
 };
 
-/*&i2c1 {
+&i2c1 {
 	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c1>;
-	status = "disabled";
+	status = "okay";
 
-	mag3110@0e {
-		compatible = "fsl,mag3110";
-		status = "disabled";
-		reg = <0x0e>;
-		position = <2>;
-	};
-
-	fxls8471@1e {
-		compatible = "fsl,fxls8471";
-		status = "disabled";
-		reg = <0x1e>;
-		position = <0>;
-		interrupt-parent = <&gpio5>;
-		interrupts = <0 8>;
-	};
-};*/
+	eeprom: eeprom@50 {
+        compatible = "at,24c02";
+        reg = <0x50>;
+    };
+};
 
 /*&i2c2 {
 	clock_frequency = <100000>;
@@ -442,21 +437,23 @@
 			fsl,pins = <
 				MX6UL_PAD_UART1_RTS_B__GPIO1_IO19	0x17059 /* SD1 CD */
 				MX6UL_PAD_SNVS_TAMPER0__GPIO5_IO00	0x80000000
-				MX6UL_PAD_UART4_TX_DATA__GPIO1_IO28	0x1b8b0 /* SCL */
-				MX6UL_PAD_UART4_RX_DATA__GPIO1_IO29	0x1b8b0 /* SDA */
+				/* MX6UL_PAD_UART4_TX_DATA__GPIO1_IO28	0x1b8b0 */ /* SCL */
+				/* MX6UL_PAD_UART4_RX_DATA__GPIO1_IO29	0x1b8b0 */ /* SDA */
 				MX6UL_PAD_UART5_TX_DATA__GPIO1_IO30	0x1b8b0 /* SCL */
 				MX6UL_PAD_UART5_RX_DATA__GPIO1_IO31	0x1b8b0 /* SDA */
 				MX6UL_PAD_GPIO1_IO01__GPIO1_IO01 0x1f8b0 /* WAKE */
 				MX6UL_PAD_GPIO1_IO02__GPIO1_IO02 0x1f8b0 /* SDA */
 				MX6UL_PAD_GPIO1_IO03__GPIO1_IO03 0x1b0b0 /* INT */
 				MX6UL_PAD_GPIO1_IO04__GPIO1_IO04 0x1f8b0 /* SCL */
+				MX6UL_PAD_SNVS_TAMPER2__GPIO5_IO02  0x79 /* BL EN */
 			>;
 		};
 
 		pinctrl_leds: ledsgrp {
 			fsl,pins = <
-				MX6UL_PAD_GPIO1_IO06__GPIO1_IO06 0x17059 /* BL */
+				/* MX6UL_PAD_GPIO1_IO06__GPIO1_IO06 0x17059 */ /* BL */
 				MX6UL_PAD_SNVS_TAMPER5__GPIO5_IO05 0x17059 /* HEARTBEAT */
+				MX6UL_PAD_SNVS_TAMPER8__GPIO5_IO08 0x17059 /* PANEL */
 			>;
 		};
 
@@ -497,12 +494,12 @@
 			>;
 		};
 
-		/*pinctrl_i2c1: i2c1grp {
+		pinctrl_i2c1: i2c1grp {
 			fsl,pins = <
 				MX6UL_PAD_UART4_TX_DATA__I2C1_SCL 0x4001b8b0
 				MX6UL_PAD_UART4_RX_DATA__I2C1_SDA 0x4001b8b0
 			>;
-		};*/
+		};
 
 		/*pinctrl_i2c2: i2c2grp {
 			fsl,pins = <
