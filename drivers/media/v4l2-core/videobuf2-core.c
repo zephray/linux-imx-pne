@@ -1245,7 +1245,6 @@ static void vb2_warn_zero_bytesused(struct vb2_buffer *vb)
 		return;
 
 	__check_once = true;
-	__WARN();
 
 	pr_warn_once("use of bytesused == 0 is deprecated and will be removed in the future,\n");
 	if (vb->vb2_queue->allow_zero_bytesused)

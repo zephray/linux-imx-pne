@@ -32,9 +32,9 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-ctrls.h>
 
-#define MIN_FPS 10
-#define MAX_FPS 10
-#define DEFAULT_FPS 10
+#define MIN_FPS 30
+#define MAX_FPS 30
+#define DEFAULT_FPS 30
 
 #define MT9M_XCLK_MIN 20000000
 #define MT9M_XCLK_MAX 20000000
@@ -43,15 +43,16 @@ enum mt9m_mode {
 	mt9m_mode_MIN = 0,
 	mt9m_mode_VGA_640_480 = 0,
 	mt9m_mode_SXGA_1280_1024 = 1,
-	mt9m_mode_MAX = 1
+	mt9m_mode_UXGA_1280_960 = 2,
+	mt9m_mode_MAX = 2
 };
 
 enum mt9m_frame_rate {
-	mt9m_10_fps,
+	mt9m_30_fps,
 };
 
 static int mt9m_framerates[] = {
-	[mt9m_10_fps] = 10,
+	[mt9m_30_fps] = 30,
 };
 
 struct mt9m_datafmt {
@@ -111,6 +112,10 @@ static struct reg_value mt9m_setting_VGA[] = {
 	{0x03, 0x03BF, 0, 0}, {0x09, 0x0200, 0, 0}, {0x20, 0x111C, 0, 0}, {0x35, 0x0010, 0, 0}, 
 };
 
+static struct reg_value mt9m_setting_UXGA[] = {
+	{0x03, 0x03BF, 0, 0}, {0x09, 0x0419, 0, 0}, {0x20, 0x1104, 0, 0}, {0x35, 0x0008, 0, 0}, 
+};
+
 static struct reg_value mt9m_setting_SXGA[] = {
 	{0x03, 0x03FF, 0, 0}, {0x09, 0x0419, 0, 0}, {0x20, 0x1104, 0, 0}, {0x35, 0x0008, 0, 0}, 
 };
@@ -123,6 +128,9 @@ static struct mt9m_mode_info mt9m_mode_info_data[1][mt9m_mode_MAX + 1] = {
 		{mt9m_mode_SXGA_1280_1024,   1280, 1024,
 		mt9m_setting_SXGA,
 		ARRAY_SIZE(mt9m_setting_SXGA)},
+		{mt9m_mode_UXGA_1280_960,    1280, 960,
+		mt9m_setting_UXGA,
+		ARRAY_SIZE(mt9m_setting_UXGA)},
 	},
 };
 
@@ -347,10 +355,10 @@ static int mt9m_s_power(struct v4l2_subdev *sd, int on)
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct mt9m *sensor = to_mt9m(client);
 
-	if (on)
+	/*if (on)
 		clk_enable(mt9m_data.sensor_clk);
 	else
-		clk_disable(mt9m_data.sensor_clk);
+		clk_disable(mt9m_data.sensor_clk);*/
 
 	sensor->on = on;
 
@@ -426,8 +434,8 @@ static int mt9m_s_parm(struct v4l2_subdev *sd, struct v4l2_streamparm *a)
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
 
 		/* Actual frame rate we use */
-		tgt_fps = 10;
-		frame_rate = mt9m_10_fps;
+		tgt_fps = 30;
+		frame_rate = mt9m_30_fps;
 
 		ret = mt9m_change_mode(frame_rate,
 				a->parm.capture.capturemode);
@@ -621,8 +629,8 @@ static int init_device(void)
 	tgt_xclk = mt9m_data.mclk;
 
 	/* Default camera frame rate is set in probe */
-	tgt_fps = 10;
-	frame_rate = mt9m_10_fps;
+	tgt_fps = DEFAULT_FPS;
+	frame_rate = mt9m_30_fps;
 
 	ret = mt9m_init_mode();
 
