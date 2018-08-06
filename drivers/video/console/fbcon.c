@@ -391,8 +391,8 @@ static void fb_flashcursor(struct work_struct *work)
 	c = scr_readw((u16 *) vc->vc_pos);
 	mode = (!ops->cursor_flash || ops->cursor_state.enable) ?
 		CM_ERASE : CM_DRAW;
-	ops->cursor(vc, info, mode, softback_lines, get_color(vc, info, c, 1),
-		    get_color(vc, info, c, 0));
+	//ops->cursor(vc, info, mode, softback_lines, get_color(vc, info, c, 1),
+	//	    get_color(vc, info, c, 0));
 	console_unlock();
 }
 
@@ -1324,8 +1324,8 @@ static void fbcon_cursor(struct vc_data *vc, int mode)
 		y = 0;
 	}
 
-	ops->cursor(vc, info, mode, y, get_color(vc, info, c, 1),
-		    get_color(vc, info, c, 0));
+	//ops->cursor(vc, info, mode, y, get_color(vc, info, c, 1),
+	//	    get_color(vc, info, c, 0));
 }
 
 static int scrollback_phys_max = 0;
