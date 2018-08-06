@@ -41,8 +41,8 @@
 		compatible = "pwm-backlight";
 		pwms = <&pwm1 0 100000 PWM_POLARITY_INVERTED>;
 		brightness-levels = <146 149 155 167 191 212 236 255>;
-		default-brightness-level = <5>;
-		enable-gpios = <&gpio5 2 GPIO_ACTIVE_HIGH>;
+		default-brightness-level = <7>;
+		enable-gpios = <&gpio5 2 0>;
 		status = "okay";
 	};
 
@@ -74,17 +74,7 @@
 			gpios = <&gpio5 3 GPIO_ACTIVE_HIGH>;
 			states = <1300000 0x1 1400000 0x0>;
 		};
-		reg_usb_otg1_vbus: regulator@2 {
-			compatible = "regulator-fixed";
-			reg = <2>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&pinctrl_usb_otg1>;
-			regulator-name = "usb_otg1_vbus";
-			regulator-min-microvolt = <5000000>;
-			regulator-max-microvolt = <5000000>;
-			gpio = <&gpio3 2 GPIO_ACTIVE_HIGH>;
-			enable-active-high;
-		};
+
 		reg_vref_3v3: regulator@3 {
 			compatible = "regulator-fixed";
 			regulator-name = "vref-3v3";
@@ -92,20 +82,6 @@
 			regulator-max-microvolt = <3300000>;
 			reg = <3>;
 		};
-	};
-
-	spi4 {
-		compatible = "spi-gpio";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_spi4>;
-		pinctrl-assert-gpios = <&gpio5 8 GPIO_ACTIVE_LOW>;
-		status = "disabled";
-		gpio-sck = <&gpio5 11 0>;
-		gpio-mosi = <&gpio5 10 0>;
-		cs-gpios = <&gpio5 7 0>;
-		num-chipselects = <1>;
-		#address-cells = <1>;
-		#size-cells = <0>;
 	};
 
 	i2c@0 {
@@ -157,6 +133,7 @@
 		pcf8563: pcf8563@51 {
 			compatible = "nxp,pcf8563";
 			reg = <0x51>;
+			#clock-cells = <0>;
 		};
 
 		/*ft5x06_ts@38 {
@@ -445,7 +422,7 @@
 				MX6UL_PAD_GPIO1_IO02__GPIO1_IO02 0x1f8b0 /* SDA */
 				MX6UL_PAD_GPIO1_IO03__GPIO1_IO03 0x1b0b0 /* INT */
 				MX6UL_PAD_GPIO1_IO04__GPIO1_IO04 0x1f8b0 /* SCL */
-				MX6UL_PAD_SNVS_TAMPER2__GPIO5_IO02  0x79 /* BL EN */
+				MX6UL_PAD_SNVS_TAMPER2__GPIO5_IO02  0x17059 /* BL EN */
 			>;
 		};
 
