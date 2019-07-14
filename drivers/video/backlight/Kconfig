@@ -75,6 +75,13 @@ config LCD_ILI9320
 	  If you have a panel based on the ILI9320 controller chip
 	  then say y to include a power driver for it.
 
+config LCD_ILI9322
+	tristate "ILI Technology ILI9322 controller support"
+	depends on SPI
+	help
+	  If you have a panel based on the ILI9322 controller chip
+	  then say y to include a power driver for it.
+
 config LCD_TDO24M
 	tristate "Toppoly TDO24M  and TDO35S LCD Panels support"
 	depends on SPI_MASTER

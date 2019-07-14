@@ -8,6 +8,7 @@ obj-$(CONFIG_LCD_HP700)			+= jornada720_lcd.o
 obj-$(CONFIG_LCD_HX8357)		+= hx8357.o
 obj-$(CONFIG_LCD_ILI922X)		+= ili922x.o
 obj-$(CONFIG_LCD_ILI9320)		+= ili9320.o
+obj-$(CONFIG_LCD_ILI9322)       += ili9322.o
 obj-$(CONFIG_LCD_L4F00242T03)		+= l4f00242t03.o
 obj-$(CONFIG_LCD_LD9040)		+= ld9040.o
 obj-$(CONFIG_LCD_LMS283GF05)		+= lms283gf05.o
