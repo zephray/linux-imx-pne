@@ -102,6 +102,7 @@
 #define CTRL_VSYNC_MODE			(1 << 18)
 #define CTRL_DOTCLK_MODE		(1 << 17)
 #define CTRL_DATA_SELECT		(1 << 16)
+#define CTRL_DATA_SWIZZLE(x)	(((x) & 0x3) << 14)
 #define CTRL_SET_BUS_WIDTH(x)		(((x) & 0x3) << 10)
 #define CTRL_GET_BUS_WIDTH(x)		(((x) >> 10) & 0x3)
 #define CTRL_SET_WORD_LENGTH(x)		(((x) & 0x3) << 8)
@@ -136,6 +137,7 @@
 #define CTRL1_IRQ_STATUS_SHIFT			8
 
 #define CTRL2_OUTSTANDING_REQS__REQ_16		(4 << 21)
+#define CTRL2_SET_PACKED_SUBWORDS(x)		(((x) & 0x7) << 4)
 
 #define TRANSFER_COUNT_SET_VCOUNT(x)	(((x) & 0xffff) << 16)
 #define TRANSFER_COUNT_GET_VCOUNT(x)	(((x) >> 16) & 0xffff)
@@ -382,6 +384,24 @@ static inline u32 get_hsync_pulse_width(struct mxsfb_info *host, unsigned val)
 		host->devdata->hs_wdth_mask;
 }
 
+static const struct fb_bitfield def_rgb332[] = {
+	[RED] = {
+		.offset = 5,
+		.length = 3,
+	},
+	[GREEN] = {
+		.offset = 2,
+		.length = 3,
+	},
+	[BLUE] = {
+		.offset = 0,
+		.length = 2,
+	},
+	[TRANSP] = {	/* no support for transparency */
+		.length = 0,
+	}
+};
+
 static const struct fb_bitfield def_rgb565[] = {
 	[RED] = {
 		.offset = 11,
@@ -613,10 +633,14 @@ static int mxsfb_check_var(struct fb_var_screeninfo *var,
 	if (var->yres_virtual < var->yres)
 		var->yres_virtual = var->yres;
 
-	if ((var->bits_per_pixel != 32) && (var->bits_per_pixel != 16))
+	if ((var->bits_per_pixel == 24))
 		var->bits_per_pixel = 32;
 
 	switch (var->bits_per_pixel) {
+	case 8:
+		/* always expect RGB 332 */
+		rgb = def_rgb332;
+		break;
 	case 16:
 		/* always expect RGB 565 */
 		rgb = def_rgb565;
@@ -624,8 +648,9 @@ static int mxsfb_check_var(struct fb_var_screeninfo *var,
 	case 32:
 		switch (host->ld_intf_width) {
 		case STMLCDIF_8BIT:
-			pr_debug("Unsupported LCD bus width mapping\n");
-			return -EINVAL;
+			/* Serial RGB mode */
+			rgb = def_rgb888;
+			break;
 		case STMLCDIF_16BIT:
 			/* 24 bit to 18 bit mapping */
 			rgb = def_rgb666;
@@ -828,6 +853,7 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 	int line_size, fb_size;
 	int reenable = 0;
 	static u32 equal_bypass = 0;
+
 #ifdef CONFIG_FB_IMX64_DEBUG
 	static int time;
 
@@ -878,6 +904,10 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 		CTRL_SET_BUS_WIDTH(host->ld_intf_width);
 
 	switch (fb_info->var.bits_per_pixel) {
+    case 8:
+        dev_dbg(&host->pdev->dev, "Setting up RGB332 mode\n");
+		ctrl |= CTRL_SET_WORD_LENGTH(1);
+		writel(CTRL1_SET_BYTE_PACKAGING(0xf), host->base + LCDC_CTRL1);
 	case 16:
 		dev_dbg(&host->pdev->dev, "Setting up RGB565 mode\n");
 		ctrl |= CTRL_SET_WORD_LENGTH(0);
@@ -885,19 +915,22 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 		break;
 	case 32:
 		dev_dbg(&host->pdev->dev, "Setting up RGB888/666 mode\n");
-		ctrl |= CTRL_SET_WORD_LENGTH(3);
 		switch (host->ld_intf_width) {
 		case STMLCDIF_8BIT:
-			dev_dbg(&host->pdev->dev,
-					"Unsupported LCD bus width mapping\n");
-			return -EINVAL;
+			/* Serial RGB mode, word length to LCD controller is 8bit */
+			dev_dbg(&host->pdev->dev, "Setting up serial RGB mode\n");
+			ctrl |= CTRL_DATA_SWIZZLE(1);
+			ctrl |= CTRL_SET_WORD_LENGTH(1);
+			break;
 		case STMLCDIF_16BIT:
 			/* 24 bit to 18 bit mapping */
+			ctrl |= CTRL_SET_WORD_LENGTH(3);
 			ctrl |= CTRL_DF24; /* ignore the upper 2 bits in
 					    *  each colour component
 					    */
 			break;
 		case STMLCDIF_18BIT:
+			ctrl |= CTRL_SET_WORD_LENGTH(3);
 			if (pixfmt_is_equal(&fb_info->var, def_rgb666))
 				/* 24 bit to 18 bit mapping */
 				ctrl |= CTRL_DF24; /* ignore the upper 2 bits in
@@ -905,6 +938,7 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 						    */
 			break;
 		case STMLCDIF_24BIT:
+			ctrl |= CTRL_SET_WORD_LENGTH(3);
 			/* real 24 bit */
 			break;
 		}
@@ -919,9 +953,45 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 
 	writel(ctrl, host->base + LCDC_CTRL);
 
-	writel(TRANSFER_COUNT_SET_VCOUNT(fb_info->var.yres) |
-			TRANSFER_COUNT_SET_HCOUNT(fb_info->var.xres),
-			host->base + host->devdata->transfer_count);
+	if ((fb_info->var.bits_per_pixel == 32) &&
+			(host->ld_intf_width == STMLCDIF_8BIT)) {
+		writel(TRANSFER_COUNT_SET_VCOUNT(fb_info->var.yres) |
+            TRANSFER_COUNT_SET_HCOUNT(fb_info->var.xres * 3),
+            host->base + host->devdata->transfer_count);
+
+		/* line length in units of clocks or pixels */
+		writel(set_hsync_pulse_width(host, fb_info->var.hsync_len) |
+			VDCTRL2_SET_HSYNC_PERIOD(fb_info->var.left_margin +
+			fb_info->var.hsync_len + fb_info->var.right_margin +
+			fb_info->var.xres * 3),
+			host->base + LCDC_VDCTRL2);
+
+		vdctrl4 = SET_DOTCLK_H_VALID_DATA_CNT(fb_info->var.xres * 3);
+	}
+	else {
+		writel(TRANSFER_COUNT_SET_VCOUNT(fb_info->var.yres) |
+            TRANSFER_COUNT_SET_HCOUNT(fb_info->var.xres),
+            host->base + host->devdata->transfer_count);
+
+		/* line length in units of clocks or pixels */
+		writel(set_hsync_pulse_width(host, fb_info->var.hsync_len) |
+			VDCTRL2_SET_HSYNC_PERIOD(fb_info->var.left_margin +
+			fb_info->var.hsync_len + fb_info->var.right_margin +
+			fb_info->var.xres),
+			host->base + LCDC_VDCTRL2);
+
+		vdctrl4 = SET_DOTCLK_H_VALID_DATA_CNT(fb_info->var.xres);
+	}
+
+    writel(SET_HOR_WAIT_CNT(fb_info->var.left_margin +
+        fb_info->var.hsync_len) |
+        SET_VERT_WAIT_CNT(fb_info->var.upper_margin +
+            fb_info->var.vsync_len),
+        host->base + LCDC_VDCTRL3);
+
+    if (mxsfb_is_v4(host))
+        vdctrl4 |= VDCTRL4_SET_DOTCLK_DLY(host->dotclk_delay);
+    writel(vdctrl4, host->base + LCDC_VDCTRL4);
 
 	vdctrl0 = VDCTRL0_ENABLE_PRESENT |	/* always in DOTCLOCK mode */
 		VDCTRL0_VSYNC_PERIOD_UNIT |
@@ -946,27 +1016,9 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 		fb_info->var.lower_margin + fb_info->var.yres,
 		host->base + LCDC_VDCTRL1);
 
-	/* line length in units of clocks or pixels */
-	writel(set_hsync_pulse_width(host, fb_info->var.hsync_len) |
-		VDCTRL2_SET_HSYNC_PERIOD(fb_info->var.left_margin +
-		fb_info->var.hsync_len + fb_info->var.right_margin +
-		fb_info->var.xres),
-		host->base + LCDC_VDCTRL2);
-
-	writel(SET_HOR_WAIT_CNT(fb_info->var.left_margin +
-		fb_info->var.hsync_len) |
-		SET_VERT_WAIT_CNT(fb_info->var.upper_margin +
-			fb_info->var.vsync_len),
-		host->base + LCDC_VDCTRL3);
-
-	vdctrl4 = SET_DOTCLK_H_VALID_DATA_CNT(fb_info->var.xres);
-	if (mxsfb_is_v4(host))
-		vdctrl4 |= VDCTRL4_SET_DOTCLK_DLY(host->dotclk_delay);
-	writel(vdctrl4, host->base + LCDC_VDCTRL4);
-
 	writel(fb_info->fix.smem_start +
-			fb_info->fix.line_length * fb_info->var.yoffset,
-			host->base + host->devdata->next_buf);
+		fb_info->fix.line_length * fb_info->var.yoffset,
+		host->base + host->devdata->next_buf);
 
 	if (reenable)
 		mxsfb_enable_controller(fb_info);
@@ -1243,6 +1295,8 @@ static int mxsfb_restore_mode(struct mxsfb_info *host)
 		break;
 	case 1:
 	default:
+		dev_err(&host->pdev->dev,
+			"unsupported word length when restoring mode\n");
 		return -EINVAL;
 	}
 
