@@ -50,7 +50,7 @@ struct ili9322_data {
 
 static uint8_t ili9322_seq_vcom[] = {
 	ILI9322_VCOM_AMP, 0x14,
-    ILI9322_VCOM_HIGH, 0x34,
+    ILI9322_VCOM_HIGH, 0x3a,
 };
 
 static uint8_t ili9322_seq_gamma[] = {

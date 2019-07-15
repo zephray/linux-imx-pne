@@ -219,6 +219,16 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c2>;
 	status = "okay";
+
+	gt928@14 {
+		compatible = "goodix,gt928";
+		reg = <0x14>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
+
+		irq-gpios = <&gpio1 25 0>;
+		reset-gpios = <&gpio1 24 0>;
+	};
 };
 
 &iomuxc {
@@ -227,6 +237,8 @@
 	pinctrl_hog_1: hoggrp-1 {
 		fsl,pins = <
 			MX6UL_PAD_LCD_RESET__GPIO3_IO04 0x17059
+			MX6UL_PAD_UART3_TX_DATA__GPIO1_IO24 0x1b0b0 /* IRQ */
+			MX6UL_PAD_UART3_RX_DATA__GPIO1_IO25 0x17059 /* RST */
 		>;
 	};
 
@@ -247,6 +259,26 @@
 		fsl,pins = <
 			MX6UL_PAD_UART5_TX_DATA__I2C2_SCL 0x4001b8b0
 			MX6UL_PAD_UART5_RX_DATA__I2C2_SDA 0x4001b8b0
+		>;
+	};
+
+	pinctrl_kpp_1: kpp1grp {
+		fsl,pins = <
+			MX6UL_PAD_ENET1_RX_EN__KPP_ROW01	0x1b010
+			MX6UL_PAD_ENET1_TX_DATA1__KPP_ROW02	0x1b010
+			MX6UL_PAD_ENET1_TX_CLK__KPP_ROW03	0x1b010
+			MX6UL_PAD_ENET2_RX_DATA0__KPP_ROW04	0x1b010	
+			MX6UL_PAD_ENET2_RX_EN__KPP_ROW05	0x1b010
+			MX6UL_PAD_ENET2_TX_DATA1__KPP_ROW06	0x1b010
+			MX6UL_PAD_ENET2_TX_CLK__KPP_ROW07	0x1b010
+			MX6UL_PAD_ENET1_RX_DATA1__KPP_COL00	0x110b0
+			MX6UL_PAD_ENET1_TX_DATA0__KPP_COL01	0x110b0
+			MX6UL_PAD_ENET1_TX_EN__KPP_COL02	0x110b0
+			MX6UL_PAD_ENET1_RX_ER__KPP_COL03	0x110b0
+			MX6UL_PAD_ENET2_RX_DATA1__KPP_COL04	0x110b0
+			MX6UL_PAD_ENET2_TX_DATA0__KPP_COL05	0x110b0
+			MX6UL_PAD_ENET2_TX_EN__KPP_COL06	0x110b0
+			MX6UL_PAD_ENET2_RX_ER__KPP_COL07	0x110b0
 		>;
 	};
 
@@ -306,6 +338,66 @@
 	};
 };
 
+&kpp {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_kpp_1>;
+	linux,keymap = <
+		0x01000019 /* P */
+		0x01010028 /* " */
+		0x01020014 /* T */
+		0x0103002d /* X */
+		0x01040033 /* : */
+		0x01050027 /* ; */
+		0x01060039 /* Space */
+		0x01070069 /* Left */
+		0x0200000e /* Bksp */
+		0x02010020 /* D */
+		0x0202002e /* C */
+		0x02030038 /* Alt (Alpha) */
+		0x02040012 /* E */
+		0x0205001e /* A */
+		0x02060022 /* G */
+		0x02070030 /* B */
+		0x03000032 /* M */
+		0x03010026 /* L */
+		0x03020025 /* K */
+		0x03030024 /* J */
+		0x03040017 /* I */
+		0x03050023 /* H */
+		0x0306002a /* Shift */
+		0x03070021 /* F */
+		0x0400003d /* F3 (Num) */
+		0x0401003c /* F2 (Plot) */
+		0x0402003b /* F1 (Symb) */
+		0x0403007d /* Meta (Home) */
+		0x0404008b /* Menu (Apps) */
+		0x0405006c /* Down */
+		0x04060001 /* Esc */
+		0x04070031 /* N */
+		0x0500001f /* S */
+		0x0501001d /* Ctrl (CAS) */
+		0x05020040 /* F6 (Menu) */
+		0x0503003f /* F5 (View) */
+		0x05040067 /* Up */
+		0x05050015 /* Y */
+		0x05060034 /* . */
+		0x0507003e /* F4 (Help) */
+		0x06000018 /* O */
+		0x06010013 /* R */
+		0x06020010 /* Q */
+		0x06030011 /* W */
+		0x0604002f /* V */
+		0x06050016 /* U */
+		0x06060035 /* / (#) */
+		0x0607002c /* Z */
+		0x0700001c /* Enter */
+		0x0701006a /* Right */
+	>;
+	keypad,num-rows = <8>;
+	keypad,num-columns = <8>;
+	status = "okay";
+};
+
 &lcdif {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lcdif_dat
@@ -315,7 +407,7 @@
 	status = "okay";
 
 	display0: display@0 {
-		bits-per-pixel = <24>;
+		bits-per-pixel = <32>;
 		bus-width = <8>;
 
 		display-timings {
@@ -327,14 +419,14 @@
 				hfront-porch = <100>;
 				hback-porch = <71>;
 				hsync-len = <1>;
-				vback-porch = <18>;
+				vback-porch = <17>;
 				vfront-porch = <6>;
 				vsync-len = <1>;
 
 				hsync-active = <0>;
 				vsync-active = <0>;
 				de-active = <1>;
-				pixelclk-active = <0>;
+				pixelclk-active = <1>;
 			};
 		};
 	};
