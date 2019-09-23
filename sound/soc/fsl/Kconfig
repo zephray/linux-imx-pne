@@ -265,6 +265,18 @@ config SND_SOC_IMX_WM8960
 	  Say Y if you want to add support for SoC audio on an i.MX board with
 	  a wm8960 codec.
 
+config SND_SOC_IMX_CS43130
+    tristate "SoC Audio support for i.MX boards with cs43130"
+    depends on OF && I2C
+    select SND_SOC_CS43130
+	select SND_SOC_IMX_PCM_DMA
+	select SND_SOC_FSL_SAI
+	select SND_SOC_FSL_UTILS
+	help
+	  SoC Audio support for i.MX boards with CS43130
+	  Say Y if you want to add support for SoC audio on an i.MX board with
+	  a CS43130 codec.
+
 config SND_SOC_IMX_SII902X
 	tristate "SoC Audio support for i.MX boards with sii902x"
 	depends on OF && I2C
